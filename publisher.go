@@ -10,7 +10,7 @@ import (
 	"github.com/ghettovoice/gosip/sip"
 	"github.com/pion/rtp/v2"
 	"github.com/q191201771/lal/pkg/base"
-	gb28181lal "github.com/q191201771/lal/pkg/gb2812"
+	gb28181lal "github.com/q191201771/lal/pkg/gb28181"
 	"go.uber.org/zap"
 	. "m7s.live/engine/v4"
 	. "m7s.live/engine/v4/codec"

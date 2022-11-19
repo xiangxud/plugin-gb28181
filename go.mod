@@ -32,7 +32,8 @@ require (
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pion/rtp v1.7.13 // indirect
 	github.com/power-devops/perfstat v0.0.0-20220216144756-c35f1ee13d7c // indirect
-	github.com/q191201771/naza v0.30.2 // indirect
+	github.com/q191201771/lal v0.32.0 // indirect
+	github.com/q191201771/naza v0.30.8 // indirect
 	github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b // indirect
 	github.com/shirou/gopsutil/v3 v3.22.5 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
