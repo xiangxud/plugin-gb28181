@@ -14,7 +14,6 @@ import (
 	"go.uber.org/zap"
 	. "m7s.live/engine/v4"
 	. "m7s.live/engine/v4/codec"
-	"m7s.live/engine/v4/codec/mpegts"
 	. "m7s.live/engine/v4/track"
 	"m7s.live/engine/v4/util"
 	"m7s.live/plugin/gb28181/v4/utils"
@@ -23,10 +22,10 @@ import (
 type GBPublisher struct {
 	Publisher
 	InviteOptions
-	channel     *Channel
-	inviteRes   sip.Response
-	parser      *utils.DecPSPackage
-	lastSeq     uint16
+	channel   *Channel
+	inviteRes sip.Response
+	// parser      *utils.DecPSPackage
+	// lastSeq     uint16
 	udpCache    *utils.PriorityQueueRtp
 	dumpFile    *os.File
 	dumpPrint   io.Writer
@@ -45,16 +44,24 @@ func (p *GBPublisher) InitGB28121lal() {
 }
 func (p *GBPublisher) onAvPacketUnpacked(packet *base.AvPacket) {
 
-	p.Info("[stream] onAvPacket. packet=%s", packet.DebugString())
-
+	p.Debug("[stream] onAvPacket. packet=" + packet.DebugString())
+	// p.=packet.PayloadType
 	if packet.IsAudio() {
-		p.PushAudio(packet.Payload)
+		p.PushAudio(packet) //uint32(packet.Timestamp), packet.Payload)
 	} else if packet.IsVideo() {
-		p.PushVideo(packet.Payload)
+		p.PushVideo(packet) //uint32(packet.Pts), uint32(packet.Timestamp), packet.Payload)
 	}
 }
 func (p *GBPublisher) PushPSlal(rtpraw []byte) {
-	p.gbunpacker.FeedRtpPacket(rtpraw)
+	if conf.IsMediaNetworkTCP() {
+		p.gbunpacker.FeedRtpPacket(rtpraw)
+	} else {
+		var rtp *rtp.Packet
+		rtp.Unmarshal(rtpraw)
+		for rtp = p.reorder.Push(rtp.SequenceNumber, rtp); rtp != nil; rtp = p.reorder.Pop() {
+			p.gbunpacker.FeedRtpPacket(rtpraw)
+		}
+	}
 }
 func (p *GBPublisher) OnEvent(event any) {
 	if p.channel == nil {
@@ -125,7 +132,80 @@ func (p *GBPublisher) Bye() int {
 	return int(resp.StatusCode())
 }
 
-func (p *GBPublisher) PushVideo(pts uint32, dts uint32, payload []byte) {
+/*
+	AvPacketPtUnknown AvPacketPt = -1
+	AvPacketPtAvc     AvPacketPt = 96 // h264
+	AvPacketPtHevc    AvPacketPt = 98 // h265
+	AvPacketPtAac     AvPacketPt = 97
+*/
+func (p *GBPublisher) PushVideo(packet *base.AvPacket) {
+	if p.VideoTrack == nil {
+		switch packet.PayloadType {
+		case base.AvPacketPtAvc:
+			p.VideoTrack = NewH264(p.Publisher.Stream)
+		case base.AvPacketPtHevc:
+			p.VideoTrack = NewH265(p.Publisher.Stream)
+		default:
+			//推测编码类型
+			var maybe264 H264NALUType
+			maybe264 = maybe264.Parse(packet.Payload[4])
+			switch maybe264 {
+			case NALU_Non_IDR_Picture,
+				NALU_IDR_Picture,
+				NALU_SEI,
+				NALU_SPS,
+				NALU_PPS,
+				NALU_Access_Unit_Delimiter:
+				p.VideoTrack = NewH264(p.Publisher.Stream)
+			default:
+				p.Info("maybe h265", zap.Uint8("type", maybe264.Byte()))
+				p.VideoTrack = NewH265(p.Publisher.Stream)
+			}
+		}
+	}
+	if len(packet.Payload) > 10 {
+		p.PrintDump(fmt.Sprintf("<td>pts:%d dts:%d data: % 2X</td>", packet.Pts, packet.Timestamp, packet.Payload[:10]))
+	} else {
+		p.PrintDump(fmt.Sprintf("<td>pts:%d dts:%d data: % 2X</td>", packet.Pts, packet.Timestamp, packet.Payload))
+	}
+	dts := uint32(packet.Timestamp)
+	pts := uint32(packet.Pts)
+	if dts == 0 {
+		dts = pts
+	}
+	p.VideoTrack.WriteAnnexB(pts, dts, packet.Payload)
+}
+func (p *GBPublisher) PushAudio(packet *base.AvPacket) {
+	if p.AudioTrack == nil {
+		switch packet.PayloadType {
+		// case mpegts.STREAM_TYPE_G711A:
+		// 	at := NewG711(p.Publisher.Stream, true)
+		// 	at.Audio.SampleRate = 8000
+		// 	at.Audio.SampleSize = 16
+		// 	at.Channels = 1
+		// 	at.AVCCHead = []byte{(byte(at.CodecID) << 4) | (1 << 1)}
+		// 	p.AudioTrack = at
+		// case mpegts.STREAM_TYPE_G711U:
+		// 	at := NewG711(p.Publisher.Stream, false)
+		// 	at.Audio.SampleRate = 8000
+		// 	at.Audio.SampleSize = 16
+		// 	at.Channels = 1
+		// 	at.AVCCHead = []byte{(byte(at.CodecID) << 4) | (1 << 1)}
+		// 	p.AudioTrack = at
+		case base.AvPacketPtAac:
+			p.AudioTrack = NewAAC(p.Publisher.Stream)
+			p.WriteADTS(packet.Payload[:7])
+		default:
+			p.Error("audio type not supported yet", zap.Uint32("type", uint32(packet.PayloadType)))
+			return
+		}
+	} else {
+		p.AudioTrack.WriteRaw(uint32(packet.Timestamp), packet.Payload)
+	}
+}
+
+/*
+func (p *GBPublisher) PushVideo1(pts uint32, dts uint32, payload []byte) {
 	if p.VideoTrack == nil {
 		switch p.parser.VideoStreamType {
 		case mpegts.STREAM_TYPE_H264:
@@ -160,7 +240,7 @@ func (p *GBPublisher) PushVideo(pts uint32, dts uint32, payload []byte) {
 	}
 	p.VideoTrack.WriteAnnexB(pts, dts, payload)
 }
-func (p *GBPublisher) PushAudio(ts uint32, payload []byte) {
+func (p *GBPublisher) PushAudio1(ts uint32, payload []byte) {
 	if p.AudioTrack == nil {
 		switch p.parser.AudioStreamType {
 		case mpegts.STREAM_TYPE_G711A:
@@ -207,9 +287,9 @@ func (p *GBPublisher) PushPS(rtp *rtp.Packet) {
 		}
 	}
 }
-
+*/
 func (p *GBPublisher) Replay(f *os.File) (err error) {
-	var rtpPacket rtp.Packet
+	// var rtpPacket rtp.Packet
 	defer f.Close()
 	if p.dumpPrint != nil {
 		p.PrintDump(`<style  type="text/css">
