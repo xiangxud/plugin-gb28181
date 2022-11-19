@@ -9,6 +9,8 @@ import (
 
 	"github.com/ghettovoice/gosip/sip"
 	"github.com/pion/rtp/v2"
+	"github.com/q191201771/lal/pkg/base"
+	gb28181lal "github.com/q191201771/lal/pkg/gb2812"
 	"go.uber.org/zap"
 	. "m7s.live/engine/v4"
 	. "m7s.live/engine/v4/codec"
@@ -30,6 +32,7 @@ type GBPublisher struct {
 	dumpPrint   io.Writer
 	lastReceive time.Time
 	reorder     util.RTPReorder[*rtp.Packet]
+	gbunpacker  *gb28181lal.PsUnpacker
 }
 
 func (p *GBPublisher) PrintDump(s string) {
@@ -37,7 +40,22 @@ func (p *GBPublisher) PrintDump(s string) {
 		p.dumpPrint.Write([]byte(s))
 	}
 }
+func (p *GBPublisher) InitGB28121lal() {
+	p.gbunpacker = gb28181lal.NewPsUnpacker().WithOnAvPacket(p.onAvPacketUnpacked)
+}
+func (p *GBPublisher) onAvPacketUnpacked(packet *base.AvPacket) {
 
+	p.Info("[stream] onAvPacket. packet=%s", packet.DebugString())
+
+	if packet.IsAudio() {
+		p.PushAudio(packet.Payload)
+	} else if packet.IsVideo() {
+		p.PushVideo(packet.Payload)
+	}
+}
+func (p *GBPublisher) PushPSlal(rtpraw []byte) {
+	p.gbunpacker.FeedRtpPacket(rtpraw)
+}
 func (p *GBPublisher) OnEvent(event any) {
 	if p.channel == nil {
 		p.IO.OnEvent(event)
@@ -216,8 +234,9 @@ func (p *GBPublisher) Replay(f *os.File) (err error) {
 		if err != nil {
 			return
 		}
-		rtpPacket.Unmarshal(payload)
-		p.PushPS(&rtpPacket)
+		p.PushPSlal(payload)
+		//rtpPacket.Unmarshal(payload)
+		//p.PushPS(&rtpPacket)
 	}
 	return
 }
@@ -262,7 +281,8 @@ func (p *GBPublisher) ListenUDP() (port uint16, err error) {
 				p.dumpFile.Write(dumpLen)
 				p.dumpFile.Write(ps)
 			}
-			p.PushPS(&rtpPacket)
+			p.PushPSlal(ps)
+			// p.PushPS(&rtpPacket)
 			conn.SetReadDeadline(time.Now().Add(time.Second * 10))
 		}
 	}()

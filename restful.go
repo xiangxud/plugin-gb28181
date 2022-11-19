@@ -87,6 +87,7 @@ func (conf *GB28181Config) API_replay(w http.ResponseWriter, r *http.Request) {
 		}
 		var pub GBPublisher
 		pub.SetIO(f)
+		pub.InitGB28121lal()
 		if err = plugin.Publish(streamPath, &pub); err == nil {
 			if printOut != "" {
 				pub.dumpPrint = w

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	. "m7s.live/engine/v4"
 	"github.com/ghettovoice/gosip/sip"
 	"go.uber.org/zap"
+	. "m7s.live/engine/v4"
 	"m7s.live/plugin/gb28181/v4/utils"
 )
 
@@ -298,6 +298,7 @@ func (channel *Channel) Invite(opt InviteOptions) (code int, err error) {
 		InviteOptions: opt,
 		channel:       channel,
 	}
+	publisher.InitGB28121lal()
 	protocol := ""
 	if conf.IsMediaNetworkTCP() {
 		protocol = "TCP/"
