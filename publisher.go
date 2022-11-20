@@ -53,15 +53,7 @@ func (p *GBPublisher) onAvPacketUnpacked(packet *base.AvPacket) {
 	}
 }
 func (p *GBPublisher) PushPSlal(rtpraw []byte) {
-	if conf.IsMediaNetworkTCP() {
-		p.gbunpacker.FeedRtpPacket(rtpraw)
-	} else {
-		var rtp *rtp.Packet
-		rtp.Unmarshal(rtpraw)
-		for rtp = p.reorder.Push(rtp.SequenceNumber, rtp); rtp != nil; rtp = p.reorder.Pop() {
-			p.gbunpacker.FeedRtpPacket(rtpraw)
-		}
-	}
+	p.gbunpacker.FeedRtpPacket(rtpraw)
 }
 func (p *GBPublisher) OnEvent(event any) {
 	if p.channel == nil {
@@ -77,6 +69,7 @@ func (p *GBPublisher) OnEvent(event any) {
 			p.Type = "GB28181 Playback"
 			p.channel.RecordPublisher = p
 		}
+		p.InitGB28121lal()
 		conf.publishers.Add(p.SSRC, p)
 		if err := error(nil); p.dump != "" {
 			if p.dumpFile, err = os.OpenFile(p.dump, os.O_WRONLY|os.O_CREATE, 0644); err != nil {

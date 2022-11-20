@@ -298,7 +298,7 @@ func (channel *Channel) Invite(opt InviteOptions) (code int, err error) {
 		InviteOptions: opt,
 		channel:       channel,
 	}
-	publisher.InitGB28121lal()
+	// publisher.InitGB28121lal()
 	protocol := ""
 	if conf.IsMediaNetworkTCP() {
 		protocol = "TCP/"
