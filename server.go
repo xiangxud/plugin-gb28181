@@ -157,7 +157,8 @@ func processTcpMediaConn(config *GB28181Config, conn net.Conn) {
 		if err := rtpPacket.Unmarshal(ps); err != nil {
 			plugin.Error("gb28181 decode rtp error:", zap.Error(err))
 		} else if publisher := config.publishers.Get(rtpPacket.SSRC); publisher != nil && publisher.Publisher.Err() == nil {
-			publisher.PushPSlal([]byte(publisher.ssrc))
+			// publisher.PushPSlal([]byte(publisher.ssrc))
+			publisher.PushPSlal(ps)
 			// publisher.PushPS(&rtpPacket)
 		}
 	}

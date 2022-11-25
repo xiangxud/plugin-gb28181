@@ -166,9 +166,13 @@ func (p *GBPublisher) PushVideo(packet *base.AvPacket) {
 	if dts == 0 {
 		dts = pts
 	}
+
 	p.VideoTrack.WriteAnnexB(pts, dts, packet.Payload)
 }
 func (p *GBPublisher) PushAudio(packet *base.AvPacket) {
+	if len(packet.Payload) == 0 {
+		return
+	}
 	if p.AudioTrack == nil {
 		switch packet.PayloadType {
 		// case mpegts.STREAM_TYPE_G711A:
@@ -282,6 +286,7 @@ func (p *GBPublisher) PushPS(rtp *rtp.Packet) {
 }
 */
 func (p *GBPublisher) Replay(f *os.File) (err error) {
+	p.InitGB28121lal()
 	// var rtpPacket rtp.Packet
 	defer f.Close()
 	if p.dumpPrint != nil {
